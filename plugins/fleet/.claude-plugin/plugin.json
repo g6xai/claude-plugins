@@ -1,7 +1,7 @@
 {
   "name": "fleet",
   "description": "Software engineering operations platform. Bootstrap any repo (greenfield or brownfield) for autonomous agent-driven development with process enforcement, Linear/Notion sync, and parallel TDD execution.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": {
     "name": "Fleet"
   },
