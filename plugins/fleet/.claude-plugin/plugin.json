@@ -1,0 +1,10 @@
+{
+  "name": "fleet",
+  "description": "Software engineering operations platform. Bootstrap any repo (greenfield or brownfield) for autonomous agent-driven development with process enforcement, Linear/Notion sync, and parallel TDD execution.",
+  "version": "1.0.0",
+  "author": {
+    "name": "Fleet"
+  },
+  "repository": "https://github.com/g6xai/claude-plugins",
+  "keywords": ["autonomous", "tdd", "orchestration", "linear", "notion", "bmad"]
+}
