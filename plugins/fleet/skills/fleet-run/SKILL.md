@@ -168,17 +168,24 @@ Monitor agent completion. Log:
 
 For each completed spec:
 
-1. **Run fleet-review:**
+1. **Validate TDD compliance:**
+   - Parse the agent's report for `Red→Green cycles`
+   - If cycles = 0 AND spec type is NOT `infra` or `broken-fix`:
+     - Log warning: "Spec {id} had 0 red→green cycles — tests may not be meaningful"
+     - Re-queue with `--force` flag for one retry
+   - If cycles > 0: TDD was followed, proceed to review
+
+2. **Run fleet-review:**
    ```
    Spawn Agent: fleet-review with spec ID
    ```
 
-2. **Collect verdicts:**
+3. **Collect verdicts:**
    - Pass → mark for merge
    - Fail (attempt 1-2) → re-queue for next wave
    - Fail (attempt 3) → mark as `blocked`
 
-3. **Run full test suite** on the merged result (Phase 5 does actual merge).
+4. **Run full test suite** on the merged result (Phase 5 does actual merge).
 
 ## PHASE 5: MERGE
 

@@ -93,7 +93,7 @@ describe('Story {ID}: {Title}', () => {
 ### Skip Existing Coverage
 Check `## Test Coverage` section and grep for existing tests. Only write tests for uncovered ACs.
 
-## PHASE 3: Run Tests (Expect Failures)
+## PHASE 3: Run Tests (Expect Failures — MANDATORY RED PHASE)
 
 Use the test runner detected in Phase 1:
 ```bash
@@ -101,22 +101,46 @@ Use the test runner detected in Phase 1:
 {package-manager} {test-runner} run {test-file} --reporter=verbose 2>&1
 ```
 
-Record what fails and why. This is your implementation roadmap.
+### Red Phase Verification (CRITICAL)
+
+You MUST verify that tests actually fail before implementing. This is the entire point of TDD.
+
+1. Run the tests you wrote in Phase 2
+2. **If ALL tests pass immediately:** Your tests are bad — they don't test real behavior. Rewrite them with stronger assertions that require actual implementation.
+3. **If SOME tests pass:** Those tests may be testing already-implemented code (acceptable for stub-upgrade and test-gap types). Log which passed and which failed.
+4. **If tests fail:** Good. Record each failure. This is your implementation roadmap.
+
+Track your red→green count. At the end, report how many tests went from failing to passing. If the count is 0, something is wrong — either you didn't write meaningful tests, or you implemented before testing.
+
+### Failure Recording
+
+For each failing test, record:
+- Test name and AC reference
+- Error message
+- Root cause hypothesis
+- File(s) that need changes
 
 ## PHASE 4: Implement Until Green
 
 ```
-while tests_failing:
-    1. Read the failure output
-    2. Identify root cause:
-       - Missing function/file → create it
-       - Stub returning mock data → replace with real implementation
-       - Wrong logic → fix it
-       - Missing schema/migration → create it
-    3. Make the MINIMAL fix for the failing test
-    4. Run just that test → fast feedback
-    5. Once it passes, run the full test file
-    6. Repeat
+for each failing_test in failure_list:
+    attempt = 0
+    while test still fails AND attempt < 10:
+        attempt += 1
+        1. Read the failure output
+        2. Identify root cause:
+           - Missing function/file → create it
+           - Stub returning mock data → replace with real implementation
+           - Wrong logic → fix it
+           - Missing schema/migration → create it
+        3. Make the MINIMAL fix for this specific failing test
+        4. Run JUST that test file → verify this test passes
+        5. Run the FULL test suite → verify no regressions
+        6. Log: "Test {name}: RED→GREEN on attempt {N}"
+
+    if attempt >= 10:
+        Log: "Test {name}: BLOCKED after 10 attempts"
+        Continue to next test
 ```
 
 ### Rules
@@ -126,6 +150,7 @@ while tests_failing:
 - **Follow project conventions.** Read CLAUDE.md and existing code patterns.
 - **Don't over-engineer.** Make the test pass. Don't refactor adjacent code.
 - **Max 10 attempts per test.** Flag and move on if stuck.
+- **Run tests after EVERY change.** Do not batch multiple fixes then test — one fix, one test run.
 
 ### External Integration Pattern
 
@@ -213,13 +238,23 @@ Output a structured summary for fleet-run:
 ```
 FLEET BUILD COMPLETE — {ID}: {Title}
 ======================================
-Status: complete
+Status: {complete | blocked}
 Tests: {N} written, {M} passing
+Red→Green cycles: {N} (tests that failed in Phase 3, then passed after Phase 4)
+Phase 3 failures: {N} tests failed as expected
+Phase 4 fix attempts: {N} total iterations across all tests
 Files: {N} created, {M} modified
 Stubs replaced: {N}
-Self-check: PASS
+Self-check: {PASS | FAIL — what was found}
 Blocking issues: {none or list}
 ```
+
+**Red→Green cycles = 0 is a red flag.** It means either:
+- Tests were trivial (didn't test real behavior)
+- Implementation existed before tests were written (not TDD)
+- Tests were written to match existing code (test-after, not test-first)
+
+The orchestrator (fleet-run) should flag specs with 0 red→green cycles for review.
 
 ## ARGUMENTS
 
