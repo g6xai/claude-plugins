@@ -1,7 +1,5 @@
 ---
-name: fleet-init
-description: Start here. Detects if repo is greenfield, brownfield, or has existing specs and routes to the correct bootstrap path.
-user-invocable: true
+description: Start here. Detects repo state and routes to correct bootstrap path.
 ---
 
-Run the fleet-init skill to bootstrap this repository.
+Run the fleet-init skill.

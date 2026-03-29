@@ -1,7 +1,5 @@
 ---
-name: fleet-doctor
-description: Full project health check. Build, tests, spec accuracy, infrastructure, sync drift.
-user-invocable: true
+description: Full project health check — build, tests, spec accuracy, infrastructure, sync drift.
 ---
 
-Run the fleet-doctor skill to check this project's health.
+Run the fleet-doctor skill.
