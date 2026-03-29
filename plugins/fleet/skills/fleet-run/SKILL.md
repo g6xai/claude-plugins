@@ -87,11 +87,23 @@ Before building anything:
 If build is broken → check for Priority 0 spec → build that first (single agent).
 If no P0 spec exists → generate one on the fly and build it.
 
-### 1B: Test Check
+### 1B: Test Baseline (CRITICAL — used by fleet-review)
 ```bash
 {package-manager} test 2>&1
 ```
-Record baseline: {N} tests, {M} passing, {K} failing.
+Record baseline and save to `_fleet/test-baseline.json`:
+```json
+{
+  "recorded_at": "ISO-8601",
+  "git_sha": "{current HEAD}",
+  "total": {N},
+  "passing": {M},
+  "failing": {K},
+  "failing_tests": ["{test name 1}", "{test name 2}"]
+}
+```
+This baseline is used by fleet-review CHECK 5 (Regression) to distinguish pre-existing failures from new regressions. Update it after every successful merge in Phase 5.
+
 Failing tests are acceptable — they may be for unimplemented specs.
 
 ### 1C: Ready Specs Check
@@ -125,11 +137,21 @@ Prioritize:
 
 ### 2C: Detect Conflicts
 
-Within the wave, check for specs that would conflict:
-- Specs touching the same files → SERIALIZE (build one, then the other)
-- Specs modifying the same DB tables → SERIALIZE
-- Specs in different packages → PARALLELIZE
-- All others → PARALLELIZE
+Determine which specs can run in parallel vs must be serialized:
+
+**Algorithm:**
+1. For each spec in the wave, collect its **file footprint**:
+   - Read the spec's `## Tasks / Subtasks` section — extract every file path mentioned
+   - Read the dep-graph entry's `source_files` array (if present)
+   - Identify the package/app the spec lives in (e.g., `apps/web`, `packages/db`, `apps/worker`)
+2. Compare footprints pairwise:
+   - **Any shared file paths** → SERIALIZE
+   - **Same DB migration directory** (e.g., both touch `packages/db/migrations/`) → SERIALIZE
+   - **Same API route directory** (e.g., both add routes under `src/app/api/`) → SERIALIZE
+   - **Different packages entirely** (e.g., one in `apps/web`, other in `packages/compensation`) → PARALLELIZE
+   - **Same package but no file overlap** → PARALLELIZE (optimistic — merge will catch conflicts)
+
+**Conflict detection is conservative.** When in doubt, serialize. A slow correct build beats a fast broken merge.
 
 ### 2D: Output Plan
 
@@ -172,52 +194,74 @@ Monitor agent completion. Log:
 
 For each completed spec:
 
-1. **Validate TDD compliance:**
-   - Parse the agent's report for `Red→Green cycles`
-   - If cycles = 0 AND spec type is NOT `infra` or `broken-fix`:
+1. **Parse the build report:**
+   - Look for `FLEET_BUILD_REPORT:` in the agent's output
+   - Extract `status`, `red_green_cycles`, `exit_reason`
+   - If report is missing or unparseable → treat as `blocked`
+
+2. **Validate TDD compliance:**
+   - If `red_green_cycles` = 0 AND spec type is NOT `infra` or `broken-fix`:
      - Log warning: "Spec {id} had 0 red→green cycles — tests may not be meaningful"
-     - Re-queue with `--force` flag for one retry
-   - If cycles > 0: TDD was followed, proceed to review
+     - If this is the first attempt → re-queue with `--force` flag for one retry
+     - If this is a retry (already has `--force`) → mark as `blocked`
+   - If `status` = `partial` → re-queue (counts as one attempt)
+   - If `status` = `blocked` → mark as `blocked` immediately (no retry)
+   - If `status` = `complete` AND `red_green_cycles` > 0 → proceed to review
 
-2. **Run fleet-review:**
-   ```
-   Spawn Agent: fleet-review with spec ID
-   ```
+3. **Run fleet-review:**
+   - Spawn fleet-reviewer agent (NOT a general-purpose agent) with the spec ID
+   - fleet-review runs its 5 checks against the spec's feature branch
 
-3. **Collect verdicts:**
+4. **Collect verdicts:**
    - Pass → mark for merge
-   - Fail (attempt 1-2) → re-queue for next wave
-   - Fail (attempt 3) → mark as `blocked`
+   - Fail (attempt 1-2) → re-queue for next wave with review failure notes
+   - Fail (attempt 3) → mark as `blocked` with full failure history
 
-4. **Run full test suite** on the merged result (Phase 5 does actual merge).
+5. **Retry budget:** Each spec gets a maximum of **3 total build+review attempts**. The counter includes both TDD retries and review failures. On attempt 3, any failure is terminal → `blocked`.
 
 ## PHASE 5: MERGE
 
-For each passing spec:
+Merge verified specs one at a time, testing after each merge. Order by dependency (upstream specs first).
 
-1. Merge the spec's feature branch into working branch:
-   ```bash
-   git merge feat/fleet-{spec-id} --no-ff
-   ```
+### 5A: Sequential Merge with Validation
 
-2. If merge conflict:
-   - Attempt auto-resolution
-   - If fails → serialize: revert this merge, queue spec for next wave
+```
+for each passing_spec in dependency_order:
+    1. Record pre-merge test baseline:
+       {package-manager} test 2>&1
+       Save: baseline_pass_count, baseline_fail_count
 
-3. After all merges, run full test suite:
-   ```bash
-   {package-manager} test 2>&1
-   ```
+    2. Merge the spec's feature branch:
+       git merge feat/story-{epic}-{story}-{slug} --no-ff
 
-4. If regression detected:
-   - Identify which merge caused it (binary search if needed)
-   - Revert that merge
-   - Mark that spec for re-attempt
+    3. If merge conflict:
+       - Do NOT attempt auto-resolution of content conflicts
+       - Git auto-merges are fine (non-conflicting changes to same file)
+       - For real conflicts: revert merge, re-queue spec for next wave
+         (the spec will be rebuilt against the new main state)
 
-5. If all clean:
-   - Commit merge
-   - Push if `--push` flag set
-   - Create PR if `--pr` flag set
+    4. Run full test suite:
+       {package-manager} test 2>&1
+
+    5. Compare against baseline:
+       - If new failures > 0 (tests that were passing before now fail):
+         - Revert this merge: git reset --hard HEAD~1
+         - Mark spec for re-attempt in next wave
+         - Log: "Spec {id} caused {N} regressions, reverted"
+       - If no new failures:
+         - Merge is clean, continue to next spec
+
+    6. If all clean after all merges:
+       - Push if `--push` flag set
+       - Create PR if `--pr` flag set
+```
+
+### 5B: Why Sequential (Not Batch)
+
+Merging all at once then testing makes it impossible to identify which spec caused a regression. Sequential merge with test-after-each means:
+- You know exactly which merge broke things
+- You can revert surgically
+- Clean specs aren't held back by a broken one
 
 ## PHASE 6: SYNC
 

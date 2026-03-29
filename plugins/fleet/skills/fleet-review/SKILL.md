@@ -84,15 +84,38 @@ Quick security scan of changed files:
 
 ## CHECK 5: Regression
 
-Run the FULL test suite (not just this spec's tests):
+Run the FULL test suite on the spec's feature branch:
 
 ```bash
 {package-manager} test 2>&1
 ```
 
-Compare against last known passing state. Did any previously passing test break?
+### Baseline Definition
 
-**Failure criteria:** Any test that was passing before this spec's changes now fails.
+The baseline is recorded by fleet-run in `_fleet/test-baseline.json` at the start of each wave. This file contains the git SHA, pass/fail counts, and the names of tests that were already failing before this spec was built.
+
+```bash
+# Read the baseline
+cat _fleet/test-baseline.json
+```
+
+If `_fleet/test-baseline.json` doesn't exist (e.g., running fleet-review standalone), fall back to computing it:
+
+```bash
+# Get the merge base (where this branch diverged from main)
+MERGE_BASE=$(git merge-base HEAD main)
+git stash && git checkout $MERGE_BASE
+{package-manager} test 2>&1  # record which tests pass
+git checkout - && git stash pop
+```
+
+### Comparison
+
+- Any test that **passed on baseline** but **fails on this branch** = regression
+- Tests that **failed on baseline** and **still fail** = pre-existing (not this spec's fault)
+- **New tests** added by this spec that fail = not a regression, but a build failure (should have been caught in fleet-build)
+
+**Failure criteria:** Any test that was passing on baseline now fails on this branch.
 
 ## OUTPUT
 

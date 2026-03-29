@@ -27,12 +27,46 @@ _bmad-output/implementation-artifacts/{epic}-{story}-*.md
 
 There is NO `_fleet/specs/` directory. If someone asks you to read from there, refuse.
 
-Extract:
+### Expected BMAD Story Format
+
+BMAD stories follow this structure. Not all sections are present in every story — adapt to what's there:
+
+```markdown
+# Story {epic}.{story}: {Title}
+
+Status: {draft | ready-for-dev | in-progress | complete | blocked}
+
+## Context
+{Business/technical context — why this story exists}
+
+## Story
+As a {role}, I want {feature}, so that {benefit}
+
+## Acceptance Criteria
+1. Given {precondition}, when {action}, then {expected outcome}
+2. Given ..., when ..., then ...
+
+## Tasks / Subtasks
+- [ ] Task 1 (AC: 1, 2)
+  - [ ] Subtask with file paths: `src/lib/whatever.ts`
+- [ ] Task 2 (AC: 3)
+
+## Dev Notes
+{Constraints, patterns to follow, dependencies on other stories}
+
+## Test Coverage
+(Empty until fleet-build fills it)
+
+## Dev Agent Record
+(Empty until fleet-build fills it)
+```
+
+Extract from the story:
 - **Acceptance Criteria** — the BDD Given-When-Then list (drives your tests)
 - **Tasks / Subtasks** — the implementation checklist with file paths
 - **Dev Notes** — constraints, patterns, dependencies
-- **Type** — broken-fix, infra, security, stub-upgrade, new-feature, test-gap
-- **Priority** — 0-5 (affects how you handle it)
+- **Type** — infer from context: broken-fix, infra, security, stub-upgrade, new-feature, test-gap
+- **Priority** — infer from dep-graph or default to 3
 
 ### 1B: Read Project Context
 
@@ -111,7 +145,32 @@ You MUST verify that tests actually fail before implementing. This is the entire
 3. **If SOME tests pass:** Those tests may be testing already-implemented code (acceptable for stub-upgrade and test-gap types). Log which passed and which failed.
 4. **If tests fail:** Good. Record each failure. This is your implementation roadmap.
 
-Track your red→green count. At the end, report how many tests went from failing to passing. If the count is 0, something is wrong — either you didn't write meaningful tests, or you implemented before testing.
+### Red→Green Tracking (MANDATORY)
+
+You MUST maintain a structured tracker throughout the build. Initialize it after Phase 3:
+
+```
+RED_GREEN_TRACKER:
+  - test: "{test name}"
+    ac: {AC number}
+    red_at: "Phase 3"
+    green_at: null
+    attempts: 0
+  - test: "{test name}"
+    ac: {AC number}
+    red_at: "Phase 3"
+    green_at: null
+    attempts: 0
+```
+
+Update `green_at` and `attempts` in Phase 4 as each test goes green. Tests that pass immediately in Phase 3 are NOT counted as red→green cycles — they were never red.
+
+**The cycle count = number of tracker entries where both `red_at` and `green_at` are non-null.**
+
+If cycle count is 0 at the end of Phase 4, something went wrong:
+- Either you didn't write meaningful tests (all passed immediately)
+- Or you implemented before testing (not TDD)
+- Go back: rewrite tests with stronger assertions, redo Phase 3-4
 
 ### Failure Recording
 
@@ -199,9 +258,11 @@ If ANY check fails → go back to Phase 4 and fix. Not done until self-check pas
 ## PHASE 6: Update Spec
 
 ### Update Status
-```markdown
-Status: complete
-```
+
+Set status based on exit condition:
+- All tests green + self-check passes → `Status: complete`
+- Some tests blocked or self-check issues → `Status: in-progress` (partial work saved)
+- Zero red→green cycles → do NOT update status (leave as-is for retry)
 
 ### Add/Update Test Coverage
 ```markdown
@@ -234,28 +295,42 @@ Status: complete
 
 ## PHASE 8: Report Back
 
-Output a structured summary for fleet-run:
+Output this EXACT structured format. fleet-run parses this — do not deviate:
 
+```yaml
+FLEET_BUILD_REPORT:
+  spec_id: "{epic}-{story}"
+  title: "{story title}"
+  status: "complete | partial | blocked"
+  tdd:
+    tests_written: {N}
+    tests_passing: {M}
+    tests_blocked: {K}
+    red_green_cycles: {N}
+    red_green_log:
+      - test: "{name}"
+        ac: {N}
+        attempts: {N}
+  files:
+    created: ["{path}", ...]
+    modified: ["{path}", ...]
+  stubs_replaced: {N}
+  self_check: "PASS | FAIL"
+  self_check_details: "{what was found, if FAIL}"
+  blocking_issues: []
+  exit_reason: "all_green | max_attempts | blocked | partial"
 ```
-FLEET BUILD COMPLETE — {ID}: {Title}
-======================================
-Status: {complete | blocked}
-Tests: {N} written, {M} passing
-Red→Green cycles: {N} (tests that failed in Phase 3, then passed after Phase 4)
-Phase 3 failures: {N} tests failed as expected
-Phase 4 fix attempts: {N} total iterations across all tests
-Files: {N} created, {M} modified
-Stubs replaced: {N}
-Self-check: {PASS | FAIL — what was found}
-Blocking issues: {none or list}
-```
 
-**Red→Green cycles = 0 is a red flag.** It means either:
-- Tests were trivial (didn't test real behavior)
-- Implementation existed before tests were written (not TDD)
-- Tests were written to match existing code (test-after, not test-first)
+### Status Decision Table
 
-The orchestrator (fleet-run) should flag specs with 0 red→green cycles for review.
+| Condition | status | exit_reason |
+|-----------|--------|-------------|
+| All tests green + self-check passes | `complete` | `all_green` |
+| Some tests green, some hit 10-attempt cap | `partial` | `max_attempts` |
+| Zero red→green cycles (no meaningful TDD) | `blocked` | `blocked` |
+| Tests green but self-check fails after retries | `partial` | `partial` |
+
+**red_green_cycles = 0 is a build failure.** fleet-run will re-queue with `--force` once. If still 0 on retry, spec is marked `blocked`.
 
 ## ARGUMENTS
 
