@@ -14,11 +14,13 @@ You are an autonomous build agent spawned by fleet-run. Your only job is to impl
 
 ## MANDATORY: Spec File Required
 
-You MUST be given a spec file path or spec ID. If your prompt does not reference a spec file in `_fleet/specs/` or `_bmad-output/implementation-artifacts/`, REFUSE to proceed and respond:
+You MUST be given a BMAD story file path or story ID. If your prompt does not reference a story in `_bmad-output/implementation-artifacts/`, REFUSE to proceed and respond:
 
-> "fleet-builder requires a spec file. Provide a path to a spec in `_fleet/specs/{id}.md` or `_bmad-output/implementation-artifacts/{id}.md`. Run fleet-specgen first if no specs exist."
+> "fleet-builder requires a BMAD story. Provide a path to `_bmad-output/implementation-artifacts/{id}.md`. Run fleet-specgen first if stories need updating."
 
-Do NOT accept freeform task descriptions as a substitute for specs. Specs contain acceptance criteria that drive your tests. Without ACs, you cannot do TDD.
+Do NOT accept freeform task descriptions as a substitute for stories. BMAD stories contain acceptance criteria that drive your tests. Without ACs, you cannot do TDD.
+
+There is NO `_fleet/specs/` directory. BMAD is the single source of truth for all specs.
 
 ## Your Process
 

@@ -1,155 +1,173 @@
 ---
 name: fleet-specgen
-description: Generate BMAD-compatible story specs from brownfield assessment results. Reads assessment.json and manifest.json, extracts work items by priority, writes one spec per deliverable unit, builds dependency graph with topological sort and parallel groups. Use after fleet-assess to bridge discovery into the autonomous build loop.
+description: Reconcile assessment findings with BMAD specs. Updates existing BMAD stories (fix status, add test ACs), creates new BMAD stories for unplanned gaps, and builds the dependency graph. BMAD is the single source of truth — Fleet never creates a parallel spec universe.
 allowed-tools: Read, Write, Grep, Glob, Bash, Agent
 context: fork
 ---
 
-# Fleet Specgen — Story Spec Generation from Brownfield Assessment
+# Fleet Specgen — BMAD Story Reconciliation & Gap Generation
 
-You are a spec generation engine. You take honest assessment results from fleet-assess and produce BMAD-compatible story specs that any build agent can pick up. Every spec you write must be indistinguishable from one produced by a BMAD planning workflow.
+You reconcile Fleet assessment results with BMAD planning artifacts. Your job is to ensure every gap found by fleet-assess has a corresponding BMAD story with testable acceptance criteria.
+
+**Cardinal rule: BMAD owns all specs.** You never create specs outside of `_bmad-output/`. There is no `_fleet/specs/` directory. Every story lives in `_bmad-output/implementation-artifacts/`.
 
 ## PREREQUISITES
 
-Before starting, verify these files exist in the project root:
+Before starting, verify these files exist:
 
-1. **`_fleet/assessment.json`** — Output of fleet-assess. Contains per-module classification (complete, mostly-complete, partial, stub, missing, broken) with details on what is real vs fake.
-2. **`_fleet/manifest.json`** — Output of fleet-discover. Contains tech stack, directory structure, entry points, modules, and conventions.
+1. **`_fleet/assessment.json`** — Output of fleet-assess (with Phase 5 reconciliation data)
+2. **`_fleet/manifest.json`** — Output of fleet-discover
+3. **`_bmad-output/implementation-artifacts/*.md`** — Existing BMAD stories
+4. **`_fleet/reconciliation.json`** (optional) — If fleet-assess ran Phase 5, this has per-story correction data
 
-If either file is missing, stop and tell the user:
-> "Run `/fleet-discover` then `/fleet-assess` first. Specgen requires both `_fleet/assessment.json` and `_fleet/manifest.json`."
+If assessment.json is missing, stop:
+> "Run `/fleet-assess` first. Specgen requires `_fleet/assessment.json`."
 
-Also check for and load if present:
-- `_fleet/assessment.md` — Human-readable assessment narrative (supplementary context)
-- `_fleet/manifest.md` — Human-readable manifest narrative (supplementary context)
+If no BMAD stories exist at all, this is a greenfield project — stop:
+> "No BMAD stories found. Run BMAD planning workflow first (`/bmad-bmm-create-epics-and-stories`)."
 
 ## CRITICAL RULES
 
-1. **One spec per deliverable unit.** A deliverable unit is the smallest piece of work that can be independently built, tested, and merged. Never combine unrelated fixes into one spec. Never split a single coherent change across multiple specs.
-2. **Acceptance criteria must be testable.** Every AC must follow Given/When/Then or a clear assertion pattern. If you cannot write a test for it, rewrite the AC until you can. No vague ACs like "code should be clean" or "performance should be good."
-3. **Dependencies must be real.** A dependency exists only if spec B literally cannot be built or tested without spec A being complete first. Shared infrastructure is a dependency. Shared domain concepts are NOT a dependency unless there is a code-level import chain. When in doubt, there is no dependency.
-4. **Assessment is truth.** If the assessment says a module is stub, it is stub. Do not re-evaluate or second-guess the classification. Generate specs from what the assessment found.
-5. **Never generate specs for complete modules.** If assessment says `complete`, skip it entirely. No "improvement" specs for working code.
-6. **Spec IDs encode priority.** Format: `{priority}-{sequence}-{slug}`. This ensures filesystem sorting matches build priority.
+1. **Never create `_fleet/specs/`.** All specs go in `_bmad-output/implementation-artifacts/`.
+2. **Update before create.** If a BMAD story already covers the gap, update it (add ACs, fix status). Only create a new story if no existing story covers the work.
+3. **Acceptance criteria must be testable.** Every AC follows Given/When/Then. The build agent writes a test directly from each AC line.
+4. **Assessment is truth.** If the assessment says a module is stub, it is stub. Do not second-guess.
+5. **BMAD numbering convention.** New stories follow existing epic-story numbering: `{epic}-{next-story}-{slug}.md`.
 
-## ARGUMENTS
+## PHASE 1: Catalog What Exists
 
-- No arguments: Full run (all 4 phases, all priorities)
-- `--priority N`: Generate specs only for priority level N (0-5)
-- `--module NAME`: Generate specs only for a specific module from the assessment
-- `--dry-run`: Phase 1 only — show extracted work items without writing specs
-- `--deps-only`: Skip spec writing, regenerate only `_fleet/dep-graph.json` from existing specs
-- `--json`: Output dep-graph as JSON only (for machine consumption)
-- `--summary`: Phase 4 only — regenerate summary from existing specs
+### 1A: Load Assessment Results
 
----
+Read `_fleet/assessment.json`. Extract:
+- All modules with classification != `complete`
+- All entries in `recommendations[]`
+- All entries in `stubInventory[]`
+- All entries in `unplannedGaps[]` (from Phase 5 reconciliation)
 
-## PHASE 1: Work Item Extraction
+### 1B: Load All BMAD Stories
 
-Read `_fleet/assessment.json` and extract every module/component that is NOT classified as `complete`. Group them by priority tier.
+Read every `.md` file in `_bmad-output/implementation-artifacts/`. For each, extract:
+- Story ID (from filename: `{epic}-{story}-{slug}.md`)
+- Epic number
+- Status
+- Acceptance Criteria count
+- Source files referenced
+- Test Coverage section (populated or empty)
 
-### Priority System
+### 1C: Load Epics Index
 
-| Priority | Label | Source | Description |
-|----------|-------|--------|-------------|
-| **0** | `broken-fix` | assessment status = `broken` | Code that exists but crashes, throws errors, or produces wrong results. Fix first because broken code blocks everything downstream. |
-| **1** | `infra` | assessment infrastructure gaps | Missing test framework, missing CI gates, missing linter config, missing build pipeline. These block autonomous agent execution. |
-| **2** | `security` | assessment security findings | Hardcoded secrets, missing auth checks, SQL injection vectors, missing RLS policies, exposed API keys. Fix before any new feature work. |
-| **3** | `stub-upgrade` | assessment status = `stub` or `partial` | Code that pretends to work but uses mocks, hardcoded data, TODO placeholders, or no-op implementations. Upgrade to real. |
-| **4** | `new-feature` | assessment status = `missing` | Functionality that does not exist at all but is needed based on manifest analysis (routes defined but unimplemented, schema tables with no CRUD, etc). |
-| **5** | `test-gap` | assessment test findings | Code that works but has no tests, inadequate tests, or tests with fake assertions. Lowest priority because the code works — it just lacks verification. |
+Read `_bmad-output/planning-artifacts/epics.md` to understand:
+- Epic numbering and titles
+- Which FRs map to which epics
+- Story sequence within each epic
 
-### Extraction Rules
+### 1D: Build the Map
 
-For each non-complete module in the assessment:
-
-1. **Read the assessment entry** — classification, details, file paths, findings
-2. **Determine the priority tier** from the table above. If a module has multiple issues (e.g., broken AND has security issues), create separate specs for each concern at the appropriate priority level.
-3. **Scope the deliverable unit** — What is the minimum set of files that must change together? This becomes one spec. If a module has 3 independent problems, that is 3 specs.
-4. **Assign a sequence number** — Within each priority tier, sequence by: (a) blocker score (how many other items depend on this), (b) estimated complexity (simpler first), (c) alphabetical by module name as tiebreaker.
-5. **Generate the slug** — Lowercase, hyphenated, max 40 chars. Derived from the module name and the nature of the fix. Example: `auth-middleware-real-jwt-validation`.
-
-### Work Item Record
-
-Build an internal list (not yet written to disk) with this structure per item:
-
+Create an internal mapping:
 ```
-ID: {priority}-{sequence}-{slug}
-Title: {concise human-readable title}
-Type: {broken-fix | infra | security | stub-upgrade | new-feature | test-gap}
-Priority: {0-5}
-Package: {package or module name from manifest}
-Source Files: [{list of files from assessment that need changes}]
-Assessment Ref: {key into assessment.json}
-Findings: {specific issues from assessment}
-Dependencies: [{other spec IDs this depends on}]
+assessment_gap → existing_bmad_story (or null)
 ```
 
-At the end of Phase 1, print a summary table:
+Match by:
+1. Source files overlap (assessment gap files match story source files)
+2. Module name matches story scope
+3. FR references match
 
+Print summary:
 ```
-WORK ITEM EXTRACTION SUMMARY
-=============================
-Priority 0 (broken-fix):    N items
-Priority 1 (infra):         N items
-Priority 2 (security):      N items
-Priority 3 (stub-upgrade):  N items
-Priority 4 (new-feature):   N items
-Priority 5 (test-gap):      N items
-─────────────────────────────────────
-Total:                       N specs to generate
-```
-
-If `--dry-run` was passed, stop here and display the full work item list.
-
----
-
-## PHASE 2: Spec Writing
-
-For each work item from Phase 1, write a BMAD-compatible story spec file.
-
-### Output Location
-
-```
-_fleet/specs/{spec-id}.md
+SPECGEN CATALOG
+================
+Assessment gaps:        N
+Covered by BMAD story:  N (will UPDATE)
+Not covered:            N (will CREATE)
+BMAD stories accurate:  N (no changes needed)
 ```
 
-Example: `_fleet/specs/0-1-payment-calc-nan-crash.md`
+## PHASE 2: Update Existing BMAD Stories
 
-### Spec Format
+For each assessment gap that maps to an existing BMAD story:
 
-Every spec MUST use this exact format. Do not deviate from the heading structure, blockquote metadata, or section order. This format is identical to BMAD story specs so that fleet-build, fleet-review, and all downstream tools work without modification.
+### 2A: Status Correction
+
+If fleet-assess Phase 5 already corrected the status, verify it was written. If not, update now:
+- Read the story file
+- Change Status to the reconciled value
+- Add reconciliation note to Technical Notes
+
+### 2B: Add Test Coverage ACs
+
+If the story has implemented ACs with no test coverage:
+
+For each untested AC, append a new AC:
+```
+{N+1}. Given the implementation of AC {ref} is complete, when the test suite runs, then AC {ref} behavior is verified by a test that imports real source code and makes meaningful assertions
+```
+
+### 2C: Add Missing Implementation ACs
+
+If the assessment found stubs in files the story owns, and no existing AC covers "replace stub with real":
+
+Append a new AC:
+```
+{N+1}. Given {file} currently returns {stub description}, when the implementation is complete, then it {expected real behavior from assessment}
+```
+
+### 2D: Set Status to Ready
+
+If the story now has unmet ACs (either original or newly added), set:
+```
+Status: ready-for-dev
+```
+
+Log each update:
+```
+  [UPDATED] {story-file} — added {N} test ACs, {M} stub ACs, status: {old} → {new}
+```
+
+## PHASE 3: Create New BMAD Stories
+
+For each assessment gap with NO matching BMAD story:
+
+### 3A: Determine Epic
+
+Based on the gap type and the files involved:
+- Infrastructure gaps → check if an infra epic exists, or create under the most relevant epic
+- Security gaps → check for a security/compliance epic
+- Orphaned code → match to the closest existing epic by domain
+- Test gaps for cross-cutting code → group under the most relevant epic
+
+### 3B: Assign Story Number
+
+Within the target epic, find the next available story number:
+```bash
+ls _bmad-output/implementation-artifacts/{epic}-*.md | sort | tail -1
+# Extract story number, increment by 1
+```
+
+### 3C: Write the Story
+
+Create `_bmad-output/implementation-artifacts/{epic}-{story}-{slug}.md`:
 
 ```markdown
-# Story {ID}: {Title}
+# Story {epic}.{story}: {Title}
 
 Status: ready-for-dev
 
-> **Type:** {broken-fix | infra | security | stub-upgrade | new-feature | test-gap}
-> **Package:** {package or module name}
-> **Priority:** {0-5}
-> **Dependencies:** {comma-separated spec IDs, or "None"}
-> **Source Files:** {comma-separated file paths from assessment}
-> **Assessment Ref:** {key into assessment.json for traceability}
-
 ## Description
 
-{2-4 sentences explaining what is wrong or missing, why it matters, and what the fix
-looks like at a high level. Reference specific findings from the assessment. An agent
-reading only this section should understand the problem domain.}
+{2-4 sentences from assessment findings. Reference specific files, line numbers, and what's wrong.}
 
 ## Acceptance Criteria
 
-1. Given {precondition}, when {action}, then {expected outcome}
-2. Given {precondition}, when {action}, then {expected outcome}
-3. ...
+1. Given {precondition from assessment}, when {action}, then {expected outcome}
+2. ...
 
 ## Technical Notes
 
-- {Implementation hints derived from manifest and assessment}
-- {Framework/library specifics from the tech stack}
-- {File paths and patterns relevant to the change}
-- {Edge cases the assessment flagged}
+- **Source:** Generated by fleet-specgen from assessment findings
+- **Assessment Ref:** {module ID from assessment.json}
+- **Stack:** {relevant tech from manifest.json}
+- {File paths and patterns from assessment}
 
 ## Test Coverage
 
@@ -160,257 +178,163 @@ reading only this section should understand the problem domain.}
 (filled by build agent after implementation)
 ```
 
-### Spec Writing Rules
+### 3D: Update Epics Index
 
-1. **Acceptance criteria count:** Minimum 2, maximum 8 per spec. If you need more than 8, the spec is too large — split it.
-2. **Given/When/Then:** Every AC must be testable. The build agent will write a test directly from each AC line. Bad: "The API should be fast." Good: "Given a request to GET /api/users, when the database has 1000 records, then the response returns within 500ms."
-3. **Dependencies field:** List only spec IDs from THIS generation run. Do not reference external systems, BMAD story IDs, or vague concepts. If the dependency is on existing complete code (per assessment), it is not a dependency — the code already exists.
-4. **Source Files field:** Exact paths from the assessment. The build agent uses these to know where to look and what to modify.
-5. **Technical Notes:** Include stack-specific guidance from `manifest.json`. If the project uses Next.js App Router, say so. If the ORM is Prisma, mention the schema file path. The build agent should not need to rediscover the tech stack.
-6. **Status is always `ready-for-dev`** for newly generated specs. The build agent or orchestrator changes this later.
+If new stories were created, append them to `_bmad-output/planning-artifacts/epics.md` under the appropriate epic.
 
-### Batch Writing
-
-Write specs in priority order (0 first, 5 last). Within a priority tier, write in sequence order. After writing each spec file, print:
-
+Log each creation:
 ```
-  [WROTE] _fleet/specs/{spec-id}.md — {title}
+  [CREATED] {story-file} — {title} (Epic {N}, {type})
 ```
 
-After all specs are written:
+## PHASE 4: Dependency Graph
 
-```
-SPEC GENERATION COMPLETE
-========================
-Wrote N spec files to _fleet/specs/
-```
+Build the dependency graph from ALL BMAD stories (not just new/updated ones).
 
----
+### 4A: Parse All Stories
 
-## PHASE 3: Dependency Graph
-
-After all specs are written, build the dependency graph. This graph is consumed by fleet-run for parallel agent orchestration.
-
-### Step 1: Parse All Specs
-
-Re-read every file in `_fleet/specs/*.md` and extract:
-- `id`: From filename (without `.md`)
-- `title`: From H1 heading
-- `priority`: From metadata blockquote
-- `type`: From metadata blockquote
-- `package`: From metadata blockquote
-- `dependencies`: From metadata blockquote (list of spec IDs)
+Read every file in `_bmad-output/implementation-artifacts/*.md`. Extract:
+- `id`: From filename
+- `title`: From H1
 - `status`: From Status line
-- `ac_count`: Number of acceptance criteria
+- `epic`: From filename prefix
+- `ac_count`: Number of ACs
+- `source_files`: From Technical Notes
+- `type`: Infer from assessment (stub-upgrade, test-gap, etc.) or default to `new-feature`
 
-### Step 2: Build the DAG
+### 4B: Compute Dependencies
 
-For each spec:
-1. Record its outgoing edges (dependencies — specs it depends ON)
-2. Record its incoming edges (dependents — specs that depend on IT)
-3. Validate: if spec A depends on spec B, spec B must exist. If not, remove the edge and warn.
+Dependencies between BMAD stories:
+- Story B imports code that Story A creates → B depends on A
+- Story B's ACs reference tables/functions from Story A → B depends on A
+- Stories in the same epic with sequential numbering have IMPLICIT ordering (respect it)
+- Cross-epic dependencies: only if there's a real code-level import chain
 
-### Step 3: Cycle Detection
+### 4C: Topological Sort + Layers
 
-Run a topological sort. If a cycle is detected:
-1. Report the cycle path (e.g., `A -> B -> C -> A`)
-2. Identify the weakest edge (the dependency that is least justified)
-3. Remove it and re-sort
-4. Warn the user about the removed edge
+Same algorithm as before:
+1. Build DAG from dependencies
+2. Detect and break cycles (warn)
+3. Assign layers (Layer 0 = no deps, Layer N = all deps in Layer 0..N-1)
+4. Within layers, detect file conflicts → serialize
 
-### Step 4: Layer Computation
+### 4D: Filter to Actionable Stories
 
-Assign each spec to a topological layer:
+The dep-graph should mark which stories are actionable:
+- `ready: true` if status is `ready-for-dev` AND all dependencies are `complete`
+- `ready: false` otherwise
 
-- **Layer 0:** Specs with no dependencies (can start immediately)
-- **Layer N:** Specs whose dependencies are ALL in layers 0 through N-1
+### 4E: Write dep-graph.json
 
-Within each layer, specs can be built in parallel.
-
-### Step 5: Parallel Group Sizing
-
-For each layer, recommend agent count:
-
-| Layer width | Agents |
-|-------------|--------|
-| 1 spec | 1 |
-| 2-3 specs | 2-3 |
-| 4-6 specs | 4 |
-| 7+ specs | 4 (stagger remainder into next wave) |
-
-### Step 6: Conflict Detection
-
-Within each layer, flag specs that may conflict:
-- Touch overlapping source files
-- Modify the same database tables or schema files
-- Both add exports to the same barrel file (index.ts)
-
-Conflicting specs within the same layer should be serialized (assigned to the same agent or placed in consecutive waves).
-
-### Step 7: Write dep-graph.json
-
-Save to `_fleet/dep-graph.json` with this exact schema:
+Save to `_fleet/dep-graph.json`:
 
 ```json
 {
   "$schema": "fleet-dep-graph-v1",
-  "generated": "ISO-8601 timestamp",
-  "project": "directory name from manifest",
+  "generated": "ISO-8601",
+  "project": "from manifest",
+  "spec_source": "_bmad-output/implementation-artifacts/",
   "summary": {
-    "total_specs": 0,
-    "by_priority": {
-      "0_broken_fix": 0,
-      "1_infra": 0,
-      "2_security": 0,
-      "3_stub_upgrade": 0,
-      "4_new_feature": 0,
-      "5_test_gap": 0
-    },
+    "total_stories": 0,
     "by_status": {
+      "complete": 0,
       "ready_for_dev": 0,
       "in_progress": 0,
-      "complete": 0,
       "blocked": 0
     },
+    "actionable_now": 0,
     "total_layers": 0,
     "estimated_waves": 0
   },
-  "specs": {
-    "{spec-id}": {
-      "id": "{spec-id}",
+  "stories": {
+    "{story-id}": {
+      "id": "{story-id}",
+      "file": "_bmad-output/implementation-artifacts/{id}.md",
       "title": "string",
-      "type": "broken-fix | infra | security | stub-upgrade | new-feature | test-gap",
-      "priority": 0,
-      "package": "string",
-      "status": "ready-for-dev",
-      "dependencies": ["spec-id", "..."],
-      "dependents": ["spec-id", "..."],
+      "epic": 0,
+      "status": "string",
+      "type": "stub-upgrade | test-gap | new-feature | infra | security | broken-fix",
+      "dependencies": ["story-id"],
+      "dependents": ["story-id"],
       "ac_count": 0,
       "layer": 0,
-      "source_files": ["path", "..."],
+      "source_files": ["path"],
       "ready": true
     }
   },
-  "layers": [
-    {
-      "layer": 0,
-      "specs": ["spec-id", "..."],
-      "parallel_agents": 1,
-      "serialized_pairs": [["spec-id", "spec-id"]],
-      "conflicts": [
-        {
-          "specs": ["spec-id", "spec-id"],
-          "reason": "both modify src/db/schema.ts"
-        }
-      ]
-    }
-  ],
-  "build_order": ["spec-id", "spec-id", "..."],
-  "next_available": ["spec-id", "..."]
+  "layers": [{
+    "layer": 0,
+    "stories": ["story-id"],
+    "parallel_agents": 1,
+    "serialized_pairs": [],
+    "conflicts": []
+  }],
+  "build_order": ["story-id"],
+  "next_available": ["story-id"]
 }
 ```
 
-### Field Definitions
+## PHASE 5: Summary Report
 
-| Field | Description |
-|-------|-------------|
-| `$schema` | Always `"fleet-dep-graph-v1"` for version identification |
-| `generated` | ISO-8601 timestamp of when the graph was built |
-| `project` | Project/directory name from `manifest.json` |
-| `summary.total_specs` | Count of all specs |
-| `summary.by_priority` | Count of specs at each priority level |
-| `summary.by_status` | Count of specs in each status |
-| `summary.total_layers` | Number of topological layers |
-| `summary.estimated_waves` | Estimated agent waves (layers adjusted for serialization) |
-| `specs.{id}.dependencies` | Spec IDs this spec depends ON (must be built first) |
-| `specs.{id}.dependents` | Spec IDs that depend on THIS spec (built after) |
-| `specs.{id}.layer` | Topological layer assignment (0 = no deps) |
-| `specs.{id}.ready` | `true` if status is `ready-for-dev` AND all dependencies are `complete` |
-| `layers[].parallel_agents` | Recommended concurrent agents for this layer |
-| `layers[].serialized_pairs` | Pairs of specs within this layer that must NOT run in parallel |
-| `layers[].conflicts` | Detected file/schema conflicts between specs in this layer |
-| `build_order` | Full topological sort — specs listed in recommended build sequence |
-| `next_available` | Specs that can be picked up RIGHT NOW (ready=true) |
-
----
-
-## PHASE 4: Summary Report
-
-Generate a human-readable summary and save to `_fleet/specgen-report.md`.
+Save to `_fleet/specgen-report.md`:
 
 ```markdown
-# Fleet Specgen Report — {project name}
+# Fleet Specgen Report — {project}
 
-Generated: {ISO-8601 timestamp}
+Generated: {timestamp}
 
-## Overview
+## Summary
 
-| Metric | Count |
+| Action | Count |
 |--------|-------|
-| Total specs generated | N |
-| Priority 0 (broken-fix) | N |
-| Priority 1 (infra) | N |
-| Priority 2 (security) | N |
-| Priority 3 (stub-upgrade) | N |
-| Priority 4 (new-feature) | N |
-| Priority 5 (test-gap) | N |
-| Dependency layers | N |
-| Estimated build waves | N |
-| Parallelizable specs | N |
+| BMAD stories checked | N |
+| Stories updated (status corrected) | N |
+| Stories updated (ACs added) | N |
+| New stories created | N |
+| Stories already accurate | N |
+| Total actionable (ready-for-dev) | N |
 
-## Build Order
+## Updated Stories
 
-### Layer 0 — No Dependencies (start immediately)
-| Spec ID | Title | Type | Package |
-|---------|-------|------|---------|
-| {id} | {title} | {type} | {package} |
+| Story | Change | Old Status | New Status | ACs Added |
+|-------|--------|------------|------------|-----------|
+| {id} | {what changed} | {old} | {new} | {N} |
 
-### Layer 1 — Depends on Layer 0
-| Spec ID | Title | Type | Depends On |
-|---------|-------|------|------------|
-| {id} | {title} | {type} | {deps} |
+## New Stories Created
 
-### Layer N — ...
-(continue for all layers)
+| Story | Epic | Type | ACs | Source |
+|-------|------|------|-----|--------|
+| {id} | {epic} | {type} | {N} | {assessment ref} |
 
-## Conflicts
+## Dependency Layers
 
-{List any detected conflicts between specs in the same layer, with
-the recommended serialization strategy.}
+### Layer 0 — Ready Now
+| Story | Title | Type |
+|-------|-------|------|
+| {id} | {title} | {type} |
 
-## Warnings
-
-{List any issues encountered during generation:
-- Removed dependency cycles
-- Specs with unusually many ACs (close to 8 limit)
-- Modules that were ambiguous to classify
-- Any assessment entries that did not produce specs (and why)}
+### Layer 1 — After Layer 0
+...
 
 ## Next Steps
 
-1. Review specs in `_fleet/specs/` — adjust ACs or dependencies if needed
-2. Run `fleet-infra` to ensure test framework and CI are ready
-3. Run `fleet-sync` to push specs to Linear and Notion
-4. Run `fleet-run` to start the autonomous build loop
+1. Review updated stories in `_bmad-output/implementation-artifacts/`
+2. Run `fleet-infra` if infrastructure gaps were found
+3. Run `fleet-run` to start the autonomous build loop
 ```
 
-Also print the summary to the console when complete.
+## ARGUMENTS
 
----
-
-## OUTPUT FILES
-
-| File | Purpose | Consumer |
-|------|---------|----------|
-| `_fleet/specs/{spec-id}.md` | One story spec per deliverable unit | fleet-build, fleet-review |
-| `_fleet/dep-graph.json` | Machine-readable dependency graph | fleet-run, fleet-plan |
-| `_fleet/specgen-report.md` | Human-readable summary | Engineer review |
+- No arguments: Full run (all 5 phases)
+- `--dry-run`: Phase 1 only — show catalog without making changes
+- `--deps-only`: Skip story updates, regenerate dep-graph from existing stories
+- `--summary`: Phase 5 only — regenerate report from current state
+- `--epic N`: Only process stories in epic N
 
 ## IMPORTANT NOTES
 
-- Specs use the EXACT same format as BMAD stories. This is intentional. Fleet-build does not know or care whether a spec came from BMAD planning or fleet-specgen. One format, one build loop.
-- The `_fleet/specs/` directory is the brownfield equivalent of `_bmad-output/implementation-artifacts/`. Both contain story specs in identical format.
-- If `_fleet/specs/` already contains specs from a previous run, warn the user and ask whether to overwrite or append. Default behavior is overwrite.
-- Spec IDs are NOT related to BMAD epic-story numbering. Fleet specs use `{priority}-{sequence}-{slug}` to encode build priority directly into the ID.
-- The dep-graph.json is the primary input for fleet-run's orchestration. If it is malformed, the entire autonomous loop breaks. Validate it before writing.
-- Never generate more than 50 specs in a single run. If the assessment produces more than 50 work items, batch by priority tier and tell the user to run `--priority N` for each tier sequentially.
+- **No `_fleet/specs/` directory.** Ever. BMAD is the single source of truth.
+- fleet-build reads from `_bmad-output/implementation-artifacts/` and updates stories there.
+- The dep-graph.json references BMAD story files. fleet-run uses it to dispatch fleet-build agents.
+- When creating new stories, follow the existing BMAD numbering. If Epic 1 has stories 1-1 through 1-8, the next story is 1-9.
+- New stories created by Fleet are indistinguishable from BMAD-planned stories. Same format, same location, same numbering.

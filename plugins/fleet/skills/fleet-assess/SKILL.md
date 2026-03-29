@@ -310,10 +310,112 @@ When using Agent tool for subagent analysis:
 - Subagent returns: per-module classification, stub list, test grade, security issues
 - Main agent aggregates results, resolves cross-module dependencies, writes final report
 
+## PHASE 5: BMAD Reconciliation
+
+If BMAD stories exist in `_bmad-output/implementation-artifacts/`, reconcile assessment findings against them. This is the critical bridge between "what BMAD planned" and "what the code actually is."
+
+### 5A: Load All BMAD Stories
+
+Read every `.md` file in `_bmad-output/implementation-artifacts/`. For each story, extract:
+- Story ID and title (from filename and H1)
+- Status field
+- Acceptance Criteria (the Given/When/Then list)
+- Source files referenced in Tasks/Technical Notes
+- Test Coverage section (if present)
+
+### 5B: Verify Each AC Against Code
+
+For each acceptance criterion in each BMAD story:
+
+1. **Identify the code that should satisfy this AC** — use source files from the story, grep for function names, route paths, or DB queries mentioned in the AC
+2. **Check if the code exists and is real:**
+   - Does the file exist?
+   - Does the function/route/handler exist?
+   - Is it a stub (matches stub patterns from Phase 2) or real?
+3. **Check if a test covers this AC:**
+   - Search for test files that import the relevant source
+   - Does any test exercise this specific AC's behavior?
+4. **Classify the AC:**
+   - `verified` — code exists, is real, has a meaningful test
+   - `implemented-untested` — code exists, is real, but no test covers it
+   - `stubbed` — code exists but is a stub/mock/placeholder
+   - `missing` — no code found that satisfies this AC
+
+### 5C: Reconcile Story Status
+
+For each BMAD story, compute the honest status:
+
+| AC Results | Correct Status |
+|------------|---------------|
+| All ACs `verified` | `complete` |
+| All ACs `verified` or `implemented-untested` | `implemented` (needs tests) |
+| Mix of real and stubbed ACs | `partial` |
+| All ACs `stubbed` | `stub` |
+| Any ACs `missing` | `incomplete` |
+
+If the story's current status disagrees with the computed status:
+1. **Update the story file** — change the Status field to the computed value
+2. **Add a reconciliation note** — append to Technical Notes:
+   ```
+   ## Fleet Reconciliation ({date})
+   - Status changed: {old} → {new}
+   - ACs verified: {N}/{total}
+   - ACs needing tests: {list}
+   - ACs still stubbed: {list}
+   - ACs missing: {list}
+   ```
+3. **Add test requirement ACs** if the story has implemented code with no tests:
+   ```
+   {N+1}. Given the implementation of AC {ref}, when tests are run, then all behavior described in AC {ref} is verified by at least one test with meaningful assertions
+   ```
+
+### 5D: Identify Unplanned Gaps
+
+After reconciling all BMAD stories, check if the assessment found issues that NO BMAD story covers:
+- Infrastructure gaps (no BMAD story for missing test framework)
+- Security findings (no BMAD story for hardcoded secrets)
+- Code that exists but has no corresponding BMAD story
+
+For each unplanned gap, record it in the assessment output under a new field:
+```json
+"unplannedGaps": [{
+  "type": "infra | security | orphaned-code",
+  "description": "What was found",
+  "files": ["paths"],
+  "recommendation": "What BMAD story should be created"
+}]
+```
+
+These will be handled by fleet-specgen, which creates new BMAD stories for them.
+
+### 5E: Write Reconciliation Report
+
+Save to `_fleet/reconciliation.json`:
+```json
+{
+  "timestamp": "ISO-8601",
+  "stories_checked": 0,
+  "stories_accurate": 0,
+  "stories_corrected": 0,
+  "corrections": [{
+    "story": "path/to/story.md",
+    "old_status": "complete",
+    "new_status": "partial",
+    "acs_verified": 3,
+    "acs_untested": 2,
+    "acs_stubbed": 1,
+    "acs_missing": 0,
+    "test_acs_added": 2
+  }],
+  "unplanned_gaps": 0
+}
+```
+
 ## IMPORTANT NOTES
 
 - The `honestCompletionRate` is calculated as: `(complete + mostly-complete) / totalModules * 100`. This is the number that matters. Do not inflate it.
 - `confidence` on each module should be `high` if you read the actual code, `medium` if you relied on grep patterns, `low` if you sampled or estimated.
-- The `recommendations` array feeds directly into fleet-specgen. Each recommendation becomes a candidate spec. Order them by priority (0 = fix broken things first, 5 = nice-to-have test gaps last).
+- The `recommendations` array feeds directly into fleet-specgen. Each recommendation becomes a candidate for BMAD story creation or update. Order them by priority (0 = fix broken things first, 5 = nice-to-have test gaps last).
 - If `--modules` is specified, only assess those modules but still produce the full JSON structure (other modules get `classification: "not-assessed"`).
 - Create the `_fleet/` directory if it does not exist.
+- BMAD reconciliation (Phase 5) MODIFIES files in `_bmad-output/implementation-artifacts/`. This is intentional — BMAD is the source of truth for specs, and Fleet's job is to keep it honest.

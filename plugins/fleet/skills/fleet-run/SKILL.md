@@ -64,10 +64,12 @@ Check for existing Fleet artifacts:
 
 | Artifact | Missing? | Action |
 |----------|----------|--------|
-| `_fleet/manifest.json` OR `_bmad-output/implementation-artifacts/*.md` | Both missing | Run fleet-init |
+| `_fleet/manifest.json` | Missing | Run fleet-discover |
+| `_bmad-output/implementation-artifacts/*.md` | Missing | Cannot proceed — run BMAD planning workflow first |
 | Test framework | Not configured | Run fleet-infra |
-| `_fleet/sync-state.json` | Yes | Run fleet-sync |
-| `_fleet/dep-graph.json` | Yes (and using Fleet specs) | Run fleet-specgen |
+| `_fleet/assessment.json` | Missing | Run fleet-assess (includes BMAD reconciliation) |
+| `_fleet/dep-graph.json` | Missing | Run fleet-specgen (updates BMAD stories + builds dep-graph) |
+| `_fleet/sync-state.json` | Missing | Run fleet-sync (optional) |
 
 If ALL exist and are fresh (<24 hours), skip bootstrap.
 If `--force-bootstrap` passed, re-run everything.
@@ -94,11 +96,11 @@ Failing tests are acceptable — they may be for unimplemented specs.
 
 ### 1C: Ready Specs Check
 
-Find specs with `Status: ready-for-dev` whose dependencies are all `Status: complete`:
+Find BMAD stories with `Status: ready-for-dev` whose dependencies are all `Status: complete`:
 
-Read dep-graph (Fleet or compute from BMAD specs):
-- If `_fleet/dep-graph.json` exists → use it
-- If BMAD specs exist → compute dep graph on the fly
+Read the dep-graph:
+- `_fleet/dep-graph.json` must exist (run fleet-specgen if missing)
+- The dep-graph references BMAD stories in `_bmad-output/implementation-artifacts/`
 
 If no specs are ready:
 - All complete? → **DONE** — run final report
@@ -150,13 +152,15 @@ For each spec in the wave:
 ```
 Spawn Agent:
   Tool: Agent
-  Subagent: fleet-build (or general-purpose with fleet-build skill)
-  Prompt: "Build spec {id} at {spec-file-path}"
-  Isolation: worktree (if available)
-  Branch: feat/fleet-{spec-id}
+  Subagent_type: fleet:fleet-builder
+  Prompt: "Build BMAD story at {story-file-path}"
+  Isolation: worktree
+  Branch: feat/story-{epic}-{story}-{slug}
   Background: true (for parallel execution)
   Timeout: 30 minutes
 ```
+
+IMPORTANT: Always use `subagent_type: fleet:fleet-builder` — never use a general-purpose agent with a custom prompt. The fleet-builder agent enforces TDD by requiring a BMAD story file with testable ACs.
 
 For serial specs, wait for the conflicting spec to complete before spawning.
 
