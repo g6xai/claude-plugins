@@ -8,24 +8,6 @@ Fleet bootstraps any repository — greenfield or brownfield — for fully auton
 
 See the [parent repo README](../../README.md) for install instructions.
 
-## Quick Start
-
-```bash
-cd /path/to/any-repo
-
-# First time — detects repo state, routes to correct path:
-/fleet-init
-
-# Autonomous build loop:
-/fleet-run
-
-# Health check:
-/fleet-doctor
-
-# Sync to Linear + Notion:
-/fleet-sync
-```
-
 ## What Fleet Does
 
 - **Greenfield repos:** Detects BMAD, guides you through product brief → PRD → architecture → epics/stories
@@ -65,54 +47,6 @@ Fleet works **alongside** BMAD — it does not install, modify, or bundle BMAD. 
 | `fleet-reviewer` | Read-only 5-check verification |
 | `fleet-security` | OWASP security audit |
 | `fleet-sync-agent` | Scheduled Linear/Notion synchronization |
-
-## Developing Fleet
-
-Fleet is a standard Claude Code plugin. You can iterate on it from any repo where it's installed.
-
-**How it works:** When you add Fleet as a local plugin path, Claude Code reads directly from that directory. Any edits to skill/agent/command files in the Fleet repo take effect on the next Claude Code restart (or session).
-
-**Workflow for iterating on Fleet from another repo:**
-
-1. You're working in e.g. `/path/to/my-project`
-2. You notice a Fleet skill needs tweaking
-3. Edit the skill directly at `/Users/Shared/code/fleet/skills/fleet-whatever/SKILL.md`
-4. Restart Claude Code (or start a new session) — changes take effect
-5. `cd /Users/Shared/code/fleet && git add -A && git commit -m "fix: ..."` to persist
-
-**Or tell Claude Code to do it:**
-```
-"Update the fleet-build skill to also check for Python stubs"
-→ Claude edits /Users/Shared/code/fleet/skills/fleet-build/SKILL.md
-→ Restart to pick up changes
-```
-
-**Per-project Fleet config** (optional):
-Create `.claude/fleet.local.md` in any project for project-specific overrides:
-```yaml
----
-linear_team: "Engineering"
-notion_parent_page: "abc123"
-max_parallel_agents: 5
-strict_mode: false
----
-```
-
-## Architecture
-
-```
-/fleet-init → detects repo state
-    ├── GREENFIELD → guides through BMAD planning (BMAD must be installed separately)
-    ├── BROWNFIELD → discover → assess → specgen
-    └── RESUME → picks up where you left off
-         ↓
-/fleet-infra → test framework, CI, hooks
-         ↓
-/fleet-sync → Linear + Notion (repo → external, one-way)
-         ↓
-/fleet-run → autonomous loop:
-    PLAN → BUILD (parallel worktrees) → VERIFY → MERGE → SYNC → LOOP
-```
 
 ## Principles
 
