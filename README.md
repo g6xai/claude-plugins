@@ -30,16 +30,6 @@ Restart Claude Code.
 |--------|-------------|
 | [fleet](plugins/fleet/) | SE ops platform — bootstrap any repo for autonomous dev with Linear/Notion sync |
 
-## For Engineers
-
-Once installed, go into any repo and run:
-
-```
-/fleet-init
-```
-
-Fleet detects your repo state and handles the rest.
-
 ## Developing
 
 Clone this repo locally for iterating on plugins:
@@ -66,4 +56,4 @@ Use `directory` source instead of `github` in your settings for live edits:
 }
 ```
 
-Edit any skill/agent/command file, restart Claude Code, changes take effect.
+Edit any skill/agent file, restart Claude Code, changes take effect.
