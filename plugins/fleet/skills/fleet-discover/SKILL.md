@@ -15,7 +15,7 @@ You are a repository discovery agent. Your job is to map an unknown brownfield c
 2. **Never modify source code.** This skill is read-only reconnaissance. The only files you create are under `_fleet/`.
 3. **Scale your approach.** A 500-file repo gets full treatment. A 200K-file monorepo gets package-level sampling. Wasting context on file listings is a failure mode.
 4. **Be fast.** Prefer Glob and Grep over reading individual files. Batch operations wherever possible.
-5. **Log progress.** After each phase completes, output a one-line status so the user knows what is happening.
+5. **Log progress.** Before each phase, emit `→ Phase {N}: {name}...`. After each phase completes, emit `✓ Phase {N} complete — {key metric}`. Example: `✓ Phase 5 complete — 12,483 LOC across 8 packages, 3 monorepo workspaces`. Never leave the user waiting silently through a multi-minute scan.
 
 ## PHASE 1: Project Identity
 

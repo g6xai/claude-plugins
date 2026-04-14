@@ -73,14 +73,17 @@ Match by:
 2. Module name matches story scope
 3. FR references match
 
-Print summary:
-```
-SPECGEN CATALOG
-================
-Assessment gaps:        N
-Covered by BMAD story:  N (will UPDATE)
-Not covered:            N (will CREATE)
-BMAD stories accurate:  N (no changes needed)
+Print summary as a markdown table — counts in the right column so users can scan them:
+
+```markdown
+## → Fleet Specgen — Catalog
+
+| Action | Count |
+|--------|------:|
+| Assessment gaps | {N} |
+| ✏️ Will UPDATE (covered by BMAD story) | {N} |
+| ➕ Will CREATE (not covered) | {N} |
+| ✅ No changes (BMAD already accurate) | {N} |
 ```
 
 ## PHASE 2: Update Existing BMAD Stories
@@ -119,9 +122,9 @@ If the story now has unmet ACs (either original or newly added), set:
 Status: ready-for-dev
 ```
 
-Log each update:
+Log each update using a single consistent format so output streams can be parsed:
 ```
-  [UPDATED] {story-file} — added {N} test ACs, {M} stub ACs, status: {old} → {new}
+[UPDATE] {story-id} — status: {old}→{new}, ACs: +{test-acs} test, +{stub-acs} stub, files: {list}
 ```
 
 ## PHASE 3: Create New BMAD Stories
@@ -182,9 +185,9 @@ Status: ready-for-dev
 
 If new stories were created, append them to `_bmad-output/planning-artifacts/epics.md` under the appropriate epic.
 
-Log each creation:
+Log each creation using the same single-line format as updates:
 ```
-  [CREATED] {story-file} — {title} (Epic {N}, {type})
+[CREATE] {story-id} — epic: {N}, type: {type}, title: "{title}"
 ```
 
 ## PHASE 4: Dependency Graph

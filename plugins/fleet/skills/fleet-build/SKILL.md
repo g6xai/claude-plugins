@@ -295,7 +295,21 @@ Set status based on exit condition:
 
 ## PHASE 8: Report Back
 
-Output this EXACT structured format. fleet-run parses this — do not deviate:
+Output TWO blocks: a human-readable status banner first (so users scanning the log see the outcome immediately), then the machine-readable YAML that fleet-run parses.
+
+### 8A: Human Status Banner (for humans)
+
+One line, at the top. Use exactly one of:
+- `✅ Build complete — {spec-id}: {tests_passing}/{tests_written} tests green, {red_green_cycles} RED→GREEN cycles, self-check PASS`
+- `⚠️ Build partial — {spec-id}: {tests_passing}/{tests_written} green, {tests_blocked} blocked, reason: {exit_reason}`
+- `❌ Build blocked — {spec-id}: {reason}`
+
+Follow with a brief files summary as a bulleted list:
+- **Created:** {N} files · **Modified:** {N} files · **Stubs replaced:** {N}
+
+### 8B: Machine-Readable Report (for fleet-run)
+
+Output this EXACT structured format after the banner. fleet-run parses this — do not deviate:
 
 ```yaml
 FLEET_BUILD_REPORT:

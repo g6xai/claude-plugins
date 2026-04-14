@@ -292,23 +292,36 @@ Last synced: {ISO-8601}
 
 ## PHASE 4: Report
 
-```
-FLEET SYNC COMPLETE
-====================
-Linear:
-  Project: {name} ({id})
-  Milestones: {count} (epics)
-  Issues: {created} created, {updated} updated, {orphaned} orphaned
+Open with a one-line banner so users see sync outcome at a glance. Use a table — not indented prose — for the per-tool breakdown.
 
-Notion:
-  Project page: {url}
-  PRD: {synced/skipped}
-  Architecture: {synced/skipped}
-  Story database: {count} rows
-  Views: board, table, by-epic
+```markdown
+## ✅ Fleet Sync Complete — Linear + Notion in sync
 
-Sync state saved to: _fleet/sync-state.json
+### Linear
+| Item | Count / Status |
+|------|---------------|
+| Project | {name} (`{id}`) |
+| Milestones (epics) | {count} |
+| Issues created | {created} |
+| Issues updated | {updated} |
+| Issues orphaned | {orphaned} ⚠️ commented as "not tracked in repo" |
+
+### Notion
+| Item | Status |
+|------|--------|
+| Project page | [{url}]({url}) |
+| PRD | ✅ synced / ⏭️ skipped |
+| Architecture | ✅ synced / ⏭️ skipped |
+| Story database | {count} rows |
+| Views | board · table · by-epic |
+
+**Sync state:** saved to `_fleet/sync-state.json` ({N} stories, {M} epics mapped)
+
+### Next Step
+→ Run `/fleet-run` to start the autonomous build loop, or `/fleet-doctor --sync-only` to verify sync accuracy.
 ```
+
+Use `⚠️` in the banner line if any orphaned issues were found, `❌` if either Linear or Notion failed to sync entirely.
 
 ## INCREMENTAL SYNC
 

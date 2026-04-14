@@ -125,21 +125,25 @@ When `--strict` is passed, upgrade advisories to blockers:
 ### Step 5: Verify
 
 After installing hooks:
-1. Read back `.claude/settings.json` to confirm hooks are present
-2. Report what was installed:
+1. Read back `.claude/settings.json` to confirm hooks are present (structural check — confirms the block was written)
+2. Trigger one hook (e.g., run a trivial Read) to confirm hooks actually load, not just that the config file contains them
+3. Report what was installed as a markdown table — not a prose list. Banner is ✅ when all hooks loaded, ⚠️ if config written but a hook failed to trigger:
 
-```
-FLEET GUARD — Hooks Installed
-===============================
-SessionStart:  Fleet context reminder
-PostToolUse:   Auto-format ({formatter})
-PreToolUse:    Spec advisory (edit)
+```markdown
+## ✅ Fleet Guard — Hooks Installed
 
-Mode: advisory (use --strict for enforcement)
-Config: .claude/settings.json
+| Event | Hook | Enabled | Verified |
+|-------|------|---------|----------|
+| SessionStart | Fleet context reminder | ✅ | ✅ |
+| PostToolUse | Auto-format ({formatter}) | ✅ | ✅ |
+| PreToolUse | Spec advisory (edit) | ✅ | ✅ |
 
-To upgrade to strict mode: /fleet-guard --strict
-To remove Fleet hooks: /fleet-guard --remove
+- **Mode:** advisory (use `--strict` for enforcement)
+- **Config:** `.claude/settings.json`
+
+### Next Step
+- To upgrade to strict mode: `/fleet-guard --strict`
+- To remove Fleet hooks: `/fleet-guard --remove`
 ```
 
 ## ARGUMENTS

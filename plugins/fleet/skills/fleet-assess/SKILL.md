@@ -26,7 +26,11 @@ Read `_fleet/manifest.json` before doing anything else. It contains:
 1. **Never trust status fields.** Comments like `// DONE`, status properties in config files, README claims of coverage — verify everything against actual code.
 2. **A stub is not an implementation.** If a function returns hardcoded data, has `TODO` comments, uses mock objects instead of real service calls, or has unused parameters prefixed with `_`, it is NOT complete. Period.
 3. **An empty query result is not a stub.** If code makes a real database call or API request that returns empty because no data exists yet, that IS a real implementation.
-4. **Log progress regularly.** After completing analysis of every 3-5 modules, output a progress update so the user can see what is happening.
+4. **Log progress regularly.** After completing analysis of every 3-5 modules, emit a single-line progress update so the user can see what is happening:
+   ```
+   → Assessed {N}/{total} modules — {complete} ✅ complete, {partial} ⚠️ partial, {stub} ⚠️ stub, {missing} ❌ missing
+   ```
+   At the end of each phase also emit `✓ Phase {N} complete — {key metric}` so users see phase transitions.
 5. **Be specific.** Never say "partially implemented." Say exactly WHAT is implemented and WHAT is missing, with file paths and line numbers.
 6. **Do not hallucinate file contents.** If you cannot find a file, say so. If you are unsure about a classification, explain your uncertainty.
 

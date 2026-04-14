@@ -184,22 +184,29 @@ Report results for each.
 ## PHASE 7: Commit and Report
 
 1. Stage all infrastructure changes
-2. Commit: `chore: bootstrap Fleet infrastructure (test, CI, hooks)`
-3. Output summary:
+2. Commit per phase using scoped messages so the git history is traceable:
+   - Phase 1: `chore(fleet-infra): install {test-framework}`
+   - Phase 2: `chore(fleet-infra): install {e2e-framework}`
+   - Phase 3: `chore(fleet-infra): add CI pipeline ({platform})`
+   - Phase 4: `chore(fleet-infra): scaffold _fleet/ working directory`
+   - Phase 5: `chore(fleet-infra): install Fleet guard hooks`
+   If any phase was a no-op (tool already present), skip its commit.
+3. Output summary. Open with a status banner, then a table — not prose. The banner uses the worst phase status: `✅` if all green, `⚠️` if anything was partial, `❌` if any setup failed.
 
-```
-FLEET INFRA COMPLETE
-====================
-Test framework: {name} — {installed/existing/fixed}
-E2E framework: {name} — {installed/existing/skipped}
-CI pipeline: {platform} — {created/updated/existing}
-  Gates: {lint, typecheck, test, build}
-Hooks: {count} installed (mode: advisory)
-Fleet directory: _fleet/ created
+```markdown
+## ✅ Fleet Infra Complete
 
-All checks passing: {yes/no}
+| Phase | Component | Result | Detail |
+|-------|-----------|--------|--------|
+| 1 | Test framework | ✅/⚠️ | {name} — {installed / existing / fixed} |
+| 2 | E2E framework | ✅/⏭️ | {name} — {installed / existing / skipped} |
+| 3 | CI pipeline | ✅/⚠️ | {platform} — {created / updated / existing} — gates: {lint, typecheck, test, build} |
+| 4 | Fleet directory | ✅ | `_fleet/` scaffolded |
+| 5 | Guard hooks | ✅ | {count} installed (mode: advisory) |
+| 6 | Verification | ✅/❌ | All checks passing: {yes/no} |
 
-Next step: /fleet-sync to push to Linear/Notion, or /fleet-run to start building.
+### Next Step
+→ Run `/fleet-sync` to push to Linear/Notion, or `/fleet-run` to start building.
 ```
 
 ## ARGUMENTS

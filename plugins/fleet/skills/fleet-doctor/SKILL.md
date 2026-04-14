@@ -105,50 +105,75 @@ Read dep-graph (Fleet or compute from specs):
 
 ## OUTPUT: Doctor Report
 
-Save to `_fleet/doctor-report.md`:
+Save to `_fleet/doctor-report.md`.
+
+Rules for the report:
+- **Overall health banner first** — compute from worst check: `✅ HEALTHY` (all green), `⚠️ NEEDS ATTENTION` (any warnings, no failures), `❌ CRITICAL` (any failure).
+- **Use status badges** (`✅` / `⚠️` / `❌`) in every table — never bare `PASS/FAIL` text.
+- **Prefix recommended actions** with `[CRITICAL]`, `[HIGH]`, `[MEDIUM]`, `[LOW]` so users know what to do first.
+- **Show totals** on every section (even when filtering to mismatches, show `{N}/{total} specs accurate ({pct}%)`).
 
 ```markdown
-# Fleet Doctor Report — {date}
+# {✅ | ⚠️ | ❌} Fleet Doctor Report — {date}
+
+**Overall health:** {HEALTHY | NEEDS ATTENTION | CRITICAL}
 
 ## Executive Summary
-- **Build:** {PASS/FAIL}
-- **Tests:** {N} passing, {M} failing
-- **Specs:** {N} verified complete, {M} overstated, {K} ready
-- **Infrastructure:** {N}/{M} checks passing
-- **Sync:** {in sync / {N} drifts / not synced}
+| Area | Status | Detail |
+|------|--------|--------|
+| Build | ✅/❌ | {error count if fail} |
+| Tests | ✅/⚠️/❌ | {N} passing, {M} failing |
+| Specs | ✅/⚠️ | {N} verified · {M} overstated · {K} ready |
+| Infrastructure | ✅/⚠️/❌ | {N}/{M} checks passing |
+| Sync | ✅/⚠️/❌ | {in sync / {N} drifts / not synced} |
 
 ## Build & Quality
-| Check | Result | Details |
+| Check | Status | Details |
 |-------|--------|---------|
-| Build | {PASS/FAIL} | {error count if fail} |
-| Lint | {PASS/FAIL} | {N} warnings, {M} errors |
-| Typecheck | {PASS/FAIL} | {N} errors |
-| Tests | {N}/{M} passing | {failing test names} |
+| Build | ✅/❌ | {error count if fail} |
+| Lint | ✅/❌ | {N} warnings, {M} errors |
+| Typecheck | ✅/❌ | {N} errors |
+| Tests | ✅/⚠️/❌ | {N}/{M} passing · {failing test names} |
 
 ## Spec Accuracy
-| Spec | Declared Status | Actual Status | Issue |
-|------|----------------|---------------|-------|
-{only show mismatches}
+**{N}/{total} specs accurate ({pct}%)** · {mismatches_count} mismatches found.
+
+| Spec | Declared | Actual | Issue |
+|------|----------|--------|-------|
+{only show mismatches — include this table even when empty with a single "No mismatches" row}
 
 ## Infrastructure
 | Item | Status | Action Needed |
 |------|--------|---------------|
-{full infrastructure table}
+{full infrastructure table with ✅/⚠️/❌ badges}
 
 ## Sync Status
-- Linear: {in sync / N drifts}
-- Notion: {in sync / N drifts}
-{drift details if any}
+| Tool | Status | Drifts |
+|------|--------|--------|
+| Linear | ✅/⚠️/❌ | {N} |
+| Notion | ✅/⚠️/❌ | {N} |
+
+{drift details if any, as a sub-table}
 
 ## Dependency Health
-- Layers: {N}
-- Ready to build: {N} specs
-- Blocked: {N} specs
-- Bottlenecks: {spec IDs that block the most work}
-- Circular deps: {none / list}
+| Metric | Value |
+|--------|-------|
+| Layers | {N} |
+| Ready to build | {N} specs |
+| Blocked | {N} specs |
+| Bottlenecks | {spec IDs that block the most work} |
+| Circular deps | ✅ none / ❌ {list} |
 
 ## Recommended Actions
-1. {prioritized list of what to fix/do next}
+Ordered by priority. Complete `[CRITICAL]` items before moving on.
+
+1. `[CRITICAL]` {action — e.g., "Fix failing build in src/foo.ts:42"}
+2. `[HIGH]` {action}
+3. `[MEDIUM]` {action}
+4. `[LOW]` {action}
+
+## Next Step
+→ {single command that addresses the top priority item}
 ```
 
 Also output the report to stdout for the user.

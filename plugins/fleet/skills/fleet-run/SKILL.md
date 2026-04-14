@@ -155,16 +155,24 @@ Determine which specs can run in parallel vs must be serialized:
 
 ### 2D: Output Plan
 
-```
-FLEET RUN — Wave {N} Plan
-===========================
-Parallel group 1:
-  Agent 1: {spec-id} — {title}
-  Agent 2: {spec-id} — {title}
-Serial (after group 1):
-  Agent 3: {spec-id} — {title} (conflicts with Agent 1)
+Emit the plan as structured markdown. Keep it scannable — reviewers should see outcomes in <5 seconds. If more than 10 specs are ready, show top N by priority and summarize the rest as `{N-N} more specs in layer {layer}`.
 
-Estimated duration: ~{N} minutes
+```markdown
+## → Fleet Run — Wave {N} Plan
+
+**Layer {layer}** · {total_ready} specs ready · {parallel_count} parallel · {serial_count} serial
+**Estimated duration:** ~{N} minutes
+
+### Parallel Group 1
+| Agent | Spec | Title | Priority |
+|-------|------|-------|----------|
+| 1 | `{spec-id}` | {title} | P{n} |
+| 2 | `{spec-id}` | {title} | P{n} |
+
+### Serial (after group 1)
+| Agent | Spec | Title | Conflicts with |
+|-------|------|-------|----------------|
+| 3 | `{spec-id}` | {title} | Agent 1 |
 ```
 
 ## PHASE 3: BUILD
@@ -277,27 +285,36 @@ This updates:
 
 ## PHASE 7: REPORT
 
+Every wave report opens with a single-line status banner so the outcome is visible at a glance, followed by structured tables. Never dump wave results as prose.
+
+```markdown
+## {✅ | ⚠️ | ❌} Wave {N} Complete — {passed}/{total} passed ({success_pct}%) in {duration}
+
+### Wave Results
+| Spec | Status | Cycles | Review | Merged |
+|------|--------|--------|--------|--------|
+| `{id}` | ✅ pass | {N} | ✅ pass | ✅ yes |
+| `{id}` | ❌ fail | {N} | ❌ regression | ❌ retry |
+
+- **Passed:** {count} · **Failed:** {count} (retry: {count}, blocked: {count}) · **Merged:** {count}
+
+### Overall Progress
+| Status | Count | % |
+|--------|-------|---|
+| ✅ Complete | {N}/{total} | {pct}% |
+| 🔨 In Progress | {N} | {pct}% |
+| ⏭️ Ready | {N} | {pct}% |
+| ❌ Blocked | {N} | {pct}% |
+
+### Next Wave
+- **Specs queued:** {spec list}
+- **Estimated remaining waves:** ~{estimate}
+
+### Next Step
+→ Looping to PHASE 2 to plan wave {N+1}…
 ```
-FLEET RUN — Wave {N} Complete
-===============================
-Built:    {list with pass/fail}
-Passed:   {count} specs
-Failed:   {count} (will retry: {count}, blocked: {count})
-Merged:   {count} specs
 
-Overall Progress:
-  Complete:    {N}/{total} specs ({percent}%)
-  In Progress: {N}
-  Ready:       {N}
-  Blocked:     {N}
-
-Next wave: {spec list}
-Remaining waves: ~{estimate}
-
-Time: {wave duration}
-```
-
-Append to `_fleet/run-progress.md`.
+Use `✅` when all specs passed, `⚠️` when some passed, `❌` when none passed. Pick one — don't emit multiple banners. Append the full markdown block to `_fleet/run-progress.md`.
 
 ## PHASE 8: LOOP
 
@@ -311,22 +328,26 @@ Append to `_fleet/run-progress.md`.
 
 ### Final Report (when all specs complete)
 
-```
-╔══════════════════════════════════════════════════╗
-║  FLEET RUN — COMPLETE                            ║
-╠══════════════════════════════════════════════════╣
-║  All {N} specs implemented and verified.         ║
-║                                                  ║
-║  Waves: {N}                                      ║
-║  Total time: {duration}                          ║
-║  Specs: {N} complete, {N} blocked                ║
-║  Tests: {N} total, all passing                   ║
-║                                                  ║
-║  Linear: {N} issues updated                      ║
-║  Notion: Project page updated                    ║
-║                                                  ║
-║  Run /fleet-doctor for a full health check.      ║
-╚══════════════════════════════════════════════════╝
+Use plain markdown — ASCII box art fragments on narrow terminals and screen readers. The headline `✅` badge is what users look for.
+
+```markdown
+# ✅ Fleet Run — Complete
+
+All **{N} specs** implemented and verified.
+
+## Summary
+| Metric | Value |
+|--------|-------|
+| Waves | {N} |
+| Total time | {duration} |
+| Specs complete | {N} |
+| Specs blocked | {N} |
+| Tests passing | {N}/{N} |
+| Linear issues updated | {N} |
+| Notion | Project page updated |
+
+## Next Step
+→ Run `/fleet-doctor` for a full health check.
 ```
 
 ## ERROR RECOVERY

@@ -119,6 +119,30 @@ git checkout - && git stash pop
 
 ## OUTPUT
 
+### Status Banner First (stdout)
+
+Before writing any JSON, emit a one-line banner so users see the verdict immediately — not after scrolling a 100-line JSON blob. Use exactly one:
+
+- `✅ Review PASS — {spec-id}: 5/5 checks passed → merge`
+- `⚠️ Review PARTIAL — {spec-id}: {N}/5 checks passed → merge with notes`
+- `❌ Review FAIL — {spec-id}: CHECK FAILED: {check name} → {rework | block}`
+
+Then summarize each check as a bulleted list with badges:
+- ✅ Spec compliance — {acs_verified}/{acs_total} ACs verified
+- ✅ Stub contamination — 0 stubs found
+- ❌ Code quality — {lint_errors} lint errors in `{file}:{line}`
+- ✅ Security — 0 issues
+- ✅ Regression — 0 tests broken
+
+### Next Steps on Failure
+
+When verdict is `fail`, append a `### Next Steps` block naming the highest-priority fix:
+- Stub detected → `Remove stub in {file}:{line} and re-run fleet-build`
+- AC unverified → `Add test covering AC {n} in {test-file}`
+- Security issue → `HUMAN REVIEW REQUIRED — do not auto-retry`
+
+### Machine-Readable Verdict
+
 Per-spec verdict saved to `_fleet/reviews/{spec-id}-review.json`:
 
 ```json

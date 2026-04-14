@@ -9,7 +9,19 @@ context: fork
 
 You are the gateway to Fleet. Your job is to detect the current state of the repository and route the engineer to the correct bootstrap path. You make zero assumptions — you detect everything empirically.
 
+## OUTPUT FORMATTING CONVENTIONS
+
+All Fleet skills follow these output rules so users can skim reports consistently:
+
+- **Status banner first.** Every report opens with a one-line status: `✅ Fleet Init — {STATE} detected` (or `⚠️` / `❌`). Users should see outcome within the first 100ms of scrolling.
+- **Status badges for every check.** Use `✅` (ok), `⚠️` (partial / needs attention), `❌` (missing / failed), `⏭️` (skipped / N/A) — never prose-only.
+- **Progress between phases.** Emit `→ Phase {N}: {name}...` before each phase and `✓ Phase {N} complete — {key metric}` after. Never leave the user staring at silence for >10 seconds.
+- **Tables for ≥3 items.** Any checklist of 3+ items becomes a markdown table with columns for `Item | Status | Detail`.
+- **Next step explicit.** Every final report ends with a `## Next Step` block containing exactly one command to run next.
+
 ## PHASE 1: DETECT REPO STATE
+
+Emit before starting: `→ Phase 1: Detecting repo state...`
 
 Run these checks in order:
 
@@ -63,6 +75,11 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
 | Code exists, no BMAD, no Fleet | BROWNFIELD |
 | Empty repo | GREENFIELD |
 
+After determining the path, emit:
+```
+✓ Phase 1 complete — state: {STATE}, routing to: {PATH}
+```
+
 ## PHASE 2: EXECUTE PATH
 
 ### PATH: GREENFIELD (empty repo)
@@ -80,29 +97,31 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
      Without BMAD, you can still use Fleet on brownfield repos that already have code.
      ```
 
-2. **Inform the engineer:**
-   ```
-   ╔══════════════════════════════════════════════════════════════╗
-   ║  FLEET — Greenfield Bootstrap                               ║
-   ╠══════════════════════════════════════════════════════════════╣
-   ║                                                              ║
-   ║  This is an empty repo. Fleet will guide you through the     ║
-   ║  full product development lifecycle:                         ║
-   ║                                                              ║
-   ║  Phase 1: Product Brief    → /bmad-bmm-create-product-brief ║
-   ║  Phase 2: PRD              → /bmad-bmm-create-prd           ║
-   ║  Phase 3: Architecture     → /bmad-bmm-create-architecture  ║
-   ║  Phase 4: Epics & Stories  → /bmad-bmm-create-epics-and-stories ║
-   ║  Phase 5: Readiness Check  → /bmad-bmm-check-implementation-readiness ║
-   ║  Phase 6: Infrastructure   → /fleet-infra                   ║
-   ║  Phase 7: Sync to PM tools → /fleet-sync                    ║
-   ║  Phase 8: Autonomous Build → /fleet-run                     ║
-   ║                                                              ║
-   ║  Start with Phase 1. Each phase has an AI agent that will    ║
-   ║  guide you through it interactively.                         ║
-   ║                                                              ║
-   ║  NEXT STEP: Run /bmad-bmm-create-product-brief              ║
-   ╚══════════════════════════════════════════════════════════════╝
+2. **Inform the engineer** using this markdown template (no ASCII box art — it breaks on narrow terminals and misaligns with varying font widths):
+   ```markdown
+   ## ✅ Fleet Init — Greenfield Bootstrap
+
+   This is an empty repo. Fleet will guide you through the full product
+   development lifecycle, one phase at a time.
+
+   ### Roadmap
+
+   | # | Phase | Command | Status |
+   |---|-------|---------|--------|
+   | 1 | Product Brief | `/bmad-bmm-create-product-brief` | ⏭️ pending |
+   | 2 | PRD | `/bmad-bmm-create-prd` | ⏭️ pending |
+   | 3 | Architecture | `/bmad-bmm-create-architecture` | ⏭️ pending |
+   | 4 | Epics & Stories | `/bmad-bmm-create-epics-and-stories` | ⏭️ pending |
+   | 5 | Readiness Check | `/bmad-bmm-check-implementation-readiness` | ⏭️ pending |
+   | 6 | Infrastructure | `/fleet-infra` | ⏭️ pending |
+   | 7 | Sync to PM tools | `/fleet-sync` | ⏭️ pending |
+   | 8 | Autonomous Build | `/fleet-run` | ⏭️ pending |
+
+   Each phase has an AI agent that will guide you through it interactively.
+
+   ### Next Step
+
+   → Run `/bmad-bmm-create-product-brief` to start Phase 1.
    ```
 
 3. **Create output directories** (these are Fleet/BMAD output locations, NOT BMAD framework files):
@@ -122,16 +141,18 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
    Wait for manifest.json
    ```
 
-2. **Show discovery results** to the user:
-   ```
-   FLEET — Brownfield Discovery Complete
-   ======================================
-   Tech stack: {from manifest}
-   Source files: {count}
-   Test files: {count}
-   CI: {platform or "none"}
+2. **Show discovery results** to the user (use markdown table, not ASCII headings):
+   ```markdown
+   ## ✅ Fleet — Brownfield Discovery Complete
 
-   Proceeding to assessment...
+   | Metric | Value |
+   |--------|-------|
+   | Tech stack | {from manifest} |
+   | Source files | {count} |
+   | Test files | {count} |
+   | CI | {platform or "❌ none"} |
+
+   → Proceeding to assessment...
    ```
 
 3. **Run fleet-assess** (via Agent tool):
@@ -141,15 +162,21 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
    ```
 
 4. **Show assessment results:**
-   ```
-   FLEET — Assessment Complete
-   ============================
-   Modules found: {count}
-   Complete: {count} | Partial: {count} | Stub: {count} | Missing: {count}
-   Test coverage: {percent}%
-   Security issues: {count}
+   ```markdown
+   ## ✅ Fleet — Assessment Complete
 
-   Generating specs for {count} work items...
+   | Classification | Count |
+   |----------------|-------|
+   | ✅ Complete | {count} |
+   | ⚠️ Partial | {count} |
+   | ⚠️ Stub | {count} |
+   | ❌ Missing | {count} |
+   | **Total modules** | **{count}** |
+
+   - Test coverage: {percent}%
+   - Security issues: {count} {badge: ✅ if 0, ⚠️ if low, ❌ if critical}
+
+   → Generating specs for {count} work items...
    ```
 
 5. **Run fleet-specgen** (via Agent tool):
@@ -159,16 +186,18 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
    ```
 
 6. **Show spec generation results:**
-   ```
-   FLEET — Specs Generated
-   ========================
-   Total specs: {count}
-   Priority 0 (broken): {count}
-   Priority 1 (infra): {count}
-   Priority 2 (security): {count}
-   Priority 3 (stub upgrades): {count}
-   Priority 4 (new features): {count}
-   Priority 5 (test gaps): {count}
+   ```markdown
+   ## ✅ Fleet — Specs Generated
+
+   | Priority | Type | Count |
+   |----------|------|-------|
+   | P0 | Broken | {count} |
+   | P1 | Infra | {count} |
+   | P2 | Security | {count} |
+   | P3 | Stub upgrades | {count} |
+   | P4 | New features | {count} |
+   | P5 | Test gaps | {count} |
+   | **Total** | | **{count}** |
 
    Dependency layers: {count}
    ```
@@ -186,13 +215,14 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
    ```
 
 2. **Output:**
-   ```
-   FLEET — BMAD Planning Complete
-   ================================
-   Stories found: {count}
-   Status: {breakdown}
+   ```markdown
+   ## ✅ Fleet — BMAD Planning Complete
 
-   Ready to set up infrastructure and start building.
+   - **Stories found:** {count}
+   - **Status breakdown:** {breakdown}
+
+   ### Next Step
+   → Ready to set up infrastructure and start building. Run `/fleet-infra`.
    ```
 
 3. → fleet-infra → fleet-sync → fleet-run
@@ -207,28 +237,36 @@ find . -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx"
    - Has stories? → All planning done, go to BMAD-READY
 
 2. **Guide to next step:**
-   ```
-   FLEET — BMAD Planning In Progress
-   ====================================
-   ✅ Product Brief: Complete
-   ✅ PRD: Complete
-   ❌ Architecture: Not found
+   ```markdown
+   ## ⚠️ Fleet — BMAD Planning In Progress
 
-   NEXT STEP: Run /bmad-bmm-create-architecture
+   | Phase | Status |
+   |-------|--------|
+   | Product Brief | ✅ Complete |
+   | PRD | ✅ Complete |
+   | Architecture | ❌ Not found |
+   | Epics & Stories | ⏭️ Pending |
+
+   ### Next Step
+   → Run `/bmad-bmm-create-architecture` to continue planning.
    ```
 
 ### PATH: CONTINUE (Fleet already bootstrapped)
 
 1. **Run fleet-doctor** (quick health check)
 2. **Show status:**
-   ```
-   FLEET — Resuming
-   =================
-   Specs: {complete}/{total} ({percent}%)
-   Last wave: {date}
-   Next stories ready: {list}
+   ```markdown
+   ## ✅ Fleet — Resuming
 
-   Resuming autonomous build...
+   | Metric | Value |
+   |--------|-------|
+   | Specs complete | {complete}/{total} ({percent}%) |
+   | Last wave | {date} |
+   | Next stories ready | {count} |
+
+   **Ready stories:** {list}
+
+   → Resuming autonomous build...
    ```
 3. → fleet-run --resume
 
