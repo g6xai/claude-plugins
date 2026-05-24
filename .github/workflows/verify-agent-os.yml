@@ -1,0 +1,30 @@
+﻿name: Verify Agent OS Contracts
+on:
+  pull_request:
+    paths:
+      - '.claude/agents/**'
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout canonical agent contracts
+        uses: actions/checkout@v4
+        with:
+          repository: g6xai/g26x-agent-os
+          path: _agent-os-canonical
+          token: ${{ secrets.AGENT_OS_READ_TOKEN }}
+          sparse-checkout: |
+            .claude/agents
+          sparse-checkout-cone-mode: false
+      - name: Compare contracts
+        run: |
+          if ! diff -r .claude/agents _agent-os-canonical/.claude/agents > /dev/null 2>&1; then
+            echo "::error::Agent contracts have drifted from canonical g26x-agent-os repo."
+            diff -r .claude/agents _agent-os-canonical/.claude/agents || true
+            exit 1
+          fi
+          echo "Agent contracts match canonical."
