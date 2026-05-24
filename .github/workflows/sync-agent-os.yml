@@ -1,0 +1,38 @@
+﻿name: Sync Agent OS Contracts
+on:
+  schedule:
+    - cron: '0 8 * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkout canonical agent contracts
+        uses: actions/checkout@v4
+        with:
+          repository: g6xai/g26x-agent-os
+          path: _agent-os-canonical
+          token: ${{ secrets.AGENT_OS_READ_TOKEN }}
+          sparse-checkout: |
+            .claude/agents
+          sparse-checkout-cone-mode: false
+      - name: Sync agent contracts
+        run: |
+          rm -rf .claude/agents
+          mkdir -p .claude
+          cp -r _agent-os-canonical/.claude/agents .claude/agents
+          rm -rf _agent-os-canonical
+      - name: Create PR if changes exist
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: sync agent contracts from g26x-agent-os"
+          title: "chore: sync agent contracts from g26x-agent-os"
+          body: |
+            Automated sync from canonical g26x-agent-os repo.
+          branch: chore/sync-agent-os
+          base: main
+          delete-branch: true
