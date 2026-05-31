@@ -1,0 +1,25 @@
+# BMAD Method v6 - Workflow Status
+project:
+  name: "claude plugins"
+  type: "library"
+  level: 1
+  initialized_at: "2026-05-31"
+phases:
+  product_brief:
+    status: "recommended"
+    artifact: null
+  prd:
+    status: "required"
+    artifact: null
+  architecture:
+    status: "optional"
+    artifact: null
+  sprint_planning:
+    status: "required"
+    artifact: null
+  stories:
+    status: "required"
+    total: 0
+    completed: 0
+current_phase: "not_started"
+next_recommended: "product-brief"
