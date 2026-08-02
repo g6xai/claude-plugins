@@ -291,7 +291,7 @@ Staging is a production rehearsal, not a generic test server. It closely matches
 - Observability
 - Vendor sandbox integrations
 
-Data may be synthetic or anonymized, but operating conditions must be realistic. **See §16 — lower-environment data governance is a funded build item, not a policy statement.**
+Data must be synthetic, or de-identified such that it no longer qualifies as production customer data, but operating conditions must be realistic. **See §16 — lower-environment data governance is a funded build item, not a policy statement.**
 
 Staging runs:
 
@@ -521,13 +521,13 @@ Every prompt, model, tool, retrieval, or logic change is tested against this set
 
 ### AI in production
 
-Confidence thresholds · deterministic validation after AI output · schema validation · rule-engine verification · human-in-the-loop approval · model and prompt versioning · full audit trails · shadow mode · champion/challenger testing · sampling for human review · drift detection · automatic fallback models · kill switches.
+Confidence thresholds · deterministic validation after AI output · schema validation · rule-engine verification · human-in-the-loop approval · model and prompt versioning · full audit trails · shadow mode · champion/challenger testing · sampling for human review · drift detection · automatic fallback to pre-approved, version-pinned fallback models that have passed the same evaluation and model-risk gates and appear in the model inventory · kill switches.
 
 **AI proposes. Deterministic systems validate. Humans approve high-risk decisions.**
 
 ## 13. Model Risk Governance
 
-Evaluation is an engineering practice. Governance is a regulatory obligation. For a lender, the AI program requires a formal model risk layer along SR 11-7 lines:
+Evaluation is an engineering practice. Governance is a regulatory obligation. For a lender, the AI program requires a formal model risk layer along the lines of Federal Reserve SR 26-2, *Revised Guidance on Model Risk Management* (April 17, 2026), which supersedes SR 11-7 — applied risk-based and scaled to our model risk profile:
 
 - **Model inventory** — every model in use, its version, owner, and business purpose.
 - **Documented intended use and limitations** — including populations and conditions where the model is *not* validated for use.
@@ -539,7 +539,7 @@ Evaluation is an engineering practice. Governance is a regulatory obligation. Fo
 
 **Fair lending / disparate impact testing.** This is its own named gate with its own owner and its own sign-off — not a bullet inside "one demographic performs worse." It applies to any model that influences pricing, eligibility, routing, or decisioning.
 
-**Reg B explainability.** Any model in a decisioning path must produce specific, accurate adverse action reason codes. A model that cannot generate reason codes cannot be placed in that path at all. This is an architectural constraint, not a reporting feature.
+**Reg B explainability.** Any model in a decisioning path must be explainable enough for the creditor to produce specific, accurate adverse action reasons under Reg B §1002.9. A model that cannot support accurate reason generation cannot be placed in that path at all. This is an architectural constraint, not a reporting feature.
 
 ---
 
@@ -774,6 +774,8 @@ AI evaluation suite · model risk governance · fair lending gate · chaos testi
 
 1. **Name a single accountable owner** for the assurance program. Shared ownership produces unowned gates.
 2. **Gates enforced in tooling survive deadline pressure. Gates enforced by policy do not.** If a control can be skipped by a person deciding to skip it, assume it will be skipped on the worst possible day.
+
+Until a control's tooling enforcement exists, it is target-state, not a representation of current operations.
 
 ---
 
